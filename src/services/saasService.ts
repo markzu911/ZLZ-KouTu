@@ -31,6 +31,15 @@ export interface UploadResponse {
   images?: { url: string; fileName: string }[];
 }
 
+export interface DirectTokenResponse {
+  success: boolean;
+  method: string;
+  objectKey: string;
+  uploadUrl: string;
+  url: string;
+  headers: Record<string, string>;
+}
+
 class SaasService {
   private userId: string | null = null;
   private toolId: string | null = null;
@@ -104,6 +113,44 @@ class SaasService {
       return json.success ? json : null;
     } catch (e) {
       console.error('Upload failed', e);
+      return null;
+    }
+  }
+
+  async getDirectToken(config: { source: 'input' | 'result'; fileName: string; mimeType: string; fileSize: number }): Promise<DirectTokenResponse | null> {
+    if (!this.userId) return null;
+    try {
+      const resp = await fetch('/api/upload/direct-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...config,
+          userId: this.userId
+        })
+      });
+      const json = await resp.json();
+      return json.success ? json : null;
+    } catch (e) {
+      console.error('Direct token failed', e);
+      return null;
+    }
+  }
+
+  async commit(config: { source: 'result'; objectKey: string; fileSize: number }): Promise<{ success: boolean; url: string } | null> {
+    if (!this.userId) return null;
+    try {
+      const resp = await fetch('/api/upload/commit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...config,
+          userId: this.userId
+        })
+      });
+      const json = await resp.json();
+      return json.success ? json : null;
+    } catch (e) {
+      console.error('Commit failed', e);
       return null;
     }
   }
