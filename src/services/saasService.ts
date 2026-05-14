@@ -118,14 +118,15 @@ class SaasService {
   }
 
   async getDirectToken(config: { source: 'input' | 'result'; fileName: string; mimeType: string; fileSize: number }): Promise<DirectTokenResponse | null> {
-    if (!this.userId) return null;
+    if (!this.userId || !this.toolId) return null;
     try {
       const resp = await fetch('/api/upload/direct-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...config,
-          userId: this.userId
+          userId: this.userId,
+          toolId: this.toolId
         })
       });
       const json = await resp.json();
@@ -137,20 +138,65 @@ class SaasService {
   }
 
   async commit(config: { source: 'result'; objectKey: string; fileSize: number }): Promise<{ success: boolean; url: string } | null> {
-    if (!this.userId) return null;
+    if (!this.userId || !this.toolId) return null;
     try {
       const resp = await fetch('/api/upload/commit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...config,
-          userId: this.userId
+          userId: this.userId,
+          toolId: this.toolId
         })
       });
       const json = await resp.json();
       return json.success ? json : null;
     } catch (e) {
       console.error('Commit failed', e);
+      return null;
+    }
+  }
+
+  async saveResultImage(dataUrl: string): Promise<{ success: boolean; url: string } | null> {
+    if (!this.userId || !this.toolId) return null;
+
+    try {
+      // 1. Prepare data
+      const [header, base64] = dataUrl.split(',');
+      const mimeType = header.match(/data:(.*);base64/)?.[1] || 'image/png';
+      const binary = atob(base64);
+      const array = [];
+      for (let i = 0; i < binary.length; i++) {
+        array.push(binary.charCodeAt(i));
+      }
+      const blob = new Blob([new Uint8Array(array)], { type: mimeType });
+      const fileSize = blob.size;
+
+      // 2. Get direct token
+      const token = await this.getDirectToken({
+        source: 'result',
+        fileName: `result_${Date.now()}.png`,
+        mimeType,
+        fileSize
+      });
+      if (!token) throw new Error('Token failed');
+
+      // 3. PUT to OSS
+      const uploadRes = await fetch(token.uploadUrl, {
+        method: token.method || 'PUT',
+        headers: token.headers,
+        body: blob
+      });
+      if (!uploadRes.ok) throw new Error('Upload failed');
+
+      // 4. Commit
+      return await this.commit({
+        source: 'result',
+        objectKey: token.objectKey,
+        fileSize
+      });
+    } catch (e) {
+      console.error('Save flow failed', e);
       return null;
     }
   }

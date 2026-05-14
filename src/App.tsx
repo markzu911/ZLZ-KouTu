@@ -132,7 +132,7 @@ export default function App() {
             
             // 4. Persistence
             if (finalImage.startsWith('data:')) {
-                await saasService.uploadResult(finalImage);
+                await saasService.saveResultImage(finalImage);
             }
           }
 
